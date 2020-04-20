@@ -7,9 +7,9 @@ import sqlalchemy as sql
 
 # Module imports
 
-messages = pd.read_csv('data/messages.csv')
+messages = pd.read_csv('messages.csv')
 
-categories = pd.read_csv('data/categories.csv')
+categories = pd.read_csv('categories.csv')
 
 # Drop duplicates (68 duplicate IDs removed)
 categories = categories.drop_duplicates(subset=['id'])
@@ -22,7 +22,12 @@ categories.loc[:, 'value'] = categories['category'].str.slice(-1).astype(int)
 categories.loc[:, 'category'] = categories['category'].str.slice(0,-2)
 
 # Pivot from long to wide form
-categories = pd.pivot_table(categories, index=['id'], columns=['category'], aggfunc='sum', fill_value=0)
+categories = pd.pivot_table(
+    categories,
+    index=['id'],
+    columns=['category'],
+    aggfunc='sum',
+    fill_value=0)
 categories.columns = categories.columns.droplevel(0)
 categories = categories.reset_index()
 
