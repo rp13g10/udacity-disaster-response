@@ -6,14 +6,18 @@ import sqlalchemy as sql
 import string
 import sys
 
+from functools import lru_cache
 from nltk.corpus import stopwords, wordnet
 from nltk.stem import WordNetLemmatizer
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
-from sklearn.model_selection import train_test_split
+from sklearn.linear_model import SGDClassifier
+from sklearn.metrics import accuracy_score, confusion_matrix, precision_score, recall_score, f1_score
+from sklearn.model_selection import train_test_split, RandomizedSearchCV
 from sklearn.multioutput import MultiOutputClassifier
 from sklearn.pipeline import Pipeline
+from sklearn.svm import SVC
 
 def load_data(db_path):
 
@@ -59,6 +63,7 @@ class Tokenizer(BaseEstimator, TransformerMixin):
             # Default parameter
             return wordnet.NOUN
 
+    @lru_cache(maxsize=16192)
     def _tokenize(self, comment):
         comment = comment.lower()
         tokens = nltk.word_tokenize(comment)
@@ -74,6 +79,7 @@ class Tokenizer(BaseEstimator, TransformerMixin):
 
         assert len(tokens) == len(pos_tags), 'Error: Mismatched tags and tokens'
 
+        # Remove stopwords after POS tagging to avoid changing meaning
         tokens = [self.wnl.lemmatize(token,
                                      pos=self._get_wordnet_pos(pos_tag))
                   for token, pos_tag
@@ -88,16 +94,66 @@ class Tokenizer(BaseEstimator, TransformerMixin):
 
 X, y, cat_names = load_data(
     r"C:\Users\ross-\Documents\GitHub\udacity-disaster-response\data\udacity.db")
-        
+
+X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2)
+
 pipe = Pipeline([
         ('features', CountVectorizer(tokenizer=Tokenizer())),
+        ('tfidf', TfidfTransformer()),
         ('clf', MultiOutputClassifier(estimator=RandomForestClassifier()))
 ])
 
-pipe = pipe.fit(X, y)
+param_grids = [
+    {'clf__estimator': [RandomForestClassifier(random_state=42, n_jobs=4)],
+     'clf__estimator__n_estimators': [16, 32, 64, 128],
+     'clf__estimator__max_features': ['sqrt', 'log2', None],
+     'clf__estimator__max_samples': [0.25, 0.5, 0.75, None]},
+    {'clf__estimator': [GradientBoostingClassifier(random_state=42,
+                                                   n_iter_no_change=50)],
+     'clf__estimator__loss': ['deviance', 'exponential'],
+     'clf__estimator__learning_rate': [0.1, 0.01, 0.001],
+     'clf__estimator__n_estimators': [16, 32, 64, 128],
+     'clf__estimator__max_features': ['sqrt', 'log2', None]}
+]
 
+optimizer = RandomizedSearchCV(
+    pipe,
+    param_grids,
+    cv=3,
+    verbose=2
+)
 
+# Takes ~1 hour on my system
+optimizer.fit(X_train, y_train)
 
+model = optimizer.best_estimator_
+params = optimizer.best_params_
+
+y_pred = optimizer.predict(X_val)
+
+n_cols = y_pred.shape[1]
+for inx, label in enumerate(cat_names):
+    true = y_val[:,inx]
+    pred = y_pred[:, inx]
+    # acc = accuracy_score(true, pred)
+    f1 = f1_score(true, pred)
+    precision = precision_score(true, pred)
+    recall = recall_score(true, pred)
+    print(f"{label}: precision - {precision:,.2f}, recall - {recall:,.2f}, f1 - {f1:,.2f}")
+
+# TODO
+# For label == 'related', some 2s have slipped through (rather than just 0s and 1s). This needs fixing.
+# Optimizer needs to be rerun to include the tfidf stage
+# Investigate changing some parameters for the count vectorizer
+# Swap out gradientboostingclassifier for the xgboost equivalent for multi-threading support
+# Refactor all code into the functions set out below
+
+score = accuracy_score(y_val, y_pred)
+cmat = confusion_matrix(y_val, y_pred, labels=cat_names)
+
+import pickle
+with open('model.pkl', 'wb') as f:
+    pickle.dump(model, f)
 
 
 # def build_model():
