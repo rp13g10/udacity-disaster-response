@@ -19,7 +19,12 @@ messages = messages.drop_duplicates(subset=['id'])
 categories.loc[:, 'categories'] = categories['categories'].str.split(';')
 categories = categories.explode('categories').rename(columns={'categories': 'category'})
 categories.loc[:, 'value'] = categories['category'].str.slice(-1).astype(int)
-categories.loc[:, 'category'] = categories['category'].str.slice(0,-2)
+categories.loc[:, 'category'] = categories['category'].str.slice(0, -2)
+
+# Remove any duplicate categories, keeps 1s before 0s
+categories.loc[:, 'value'] = categories['value'].map(lambda x: int(x >= 1))
+categories = categories.sort_values(by=['id', 'category', 'value'])
+categories = categories.drop_duplicates(subset=['id', 'category'], keep='last')
 
 # Pivot from long to wide form
 categories = pd.pivot_table(
