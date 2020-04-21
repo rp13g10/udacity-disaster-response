@@ -1,14 +1,14 @@
-import os
-file_dir = os.path.dirname(os.path.realpath(__file__))
-os.chdir(file_dir)
+'''Ingests data from the provided csv files, parses them into a format which can be used
+for model creation and saves the output to a SQLite database.'''
 
+import os
 import pandas as pd
 import sqlalchemy as sql
 
-# Module imports
-
+# File imports
+file_dir = os.path.dirname(os.path.realpath(__file__))
+os.chdir(file_dir)
 messages = pd.read_csv('messages.csv')
-
 categories = pd.read_csv('categories.csv')
 
 # Drop duplicates (68 duplicate IDs removed)
