@@ -2,9 +2,11 @@
 classifier object. Saves the object and generated metrics to disk.
 '''
 
+import json
 import os
 import pickle
 import string
+import sys
 from functools import lru_cache
 
 import nltk
@@ -22,6 +24,9 @@ from sklearn.pipeline import Pipeline
 from xgboost import XGBClassifier
 
 # pylint: disable=redefined-outer-name
+
+file_dir = os.path.dirname(os.path.realpath(__file__))
+os.chdir(file_dir)
 
 def load_data(db_path):
     '''Load processed data from the specified SQLite database, return
@@ -136,7 +141,7 @@ def build_model():
          'clf__estimator__learning_rate': [0.1, 0.01, 0.001],
          'clf__estimator__booster': ['gbtree', 'gblinear', 'dart'],
          'clf__estimator__colsample_bytree': [0.25, 0.5, 0.75, 1.0],
-         'clf__estimator__num_parallel_tree': [1, 16, 32, 64, 128]}
+         'clf__estimator__num_parallel_tree': [1, 4, 16]}
     ]
 
     optimizer = RandomizedSearchCV(
@@ -175,16 +180,18 @@ def evaluate_model(model, X_val, y_val, cat_names):
     return performance
 
 
-def save_model(model, model_filepath):
+def save_model(model, params, model_path):
     '''Save the provided model object to model_filepath'''
 
-    with open(model_filepath, 'wb') as f:
+    with open(model_path, 'wb') as f:
         pickle.dump(model, f)
+
+    with open(f'{model_path}.params', 'w') as f:
+        json.dump(params, f)
 
 
 # Testing - function calls as in main()
-X, y, cat_names = load_data(
-    r"C:\Users\ross-\Documents\GitHub\udacity-disaster-response\data\udacity.db")
+X, y, cat_names = load_data("../data/udacity.db")
 
 X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2)
 
@@ -193,48 +200,44 @@ optimizer = build_model()
 # Takes ~1 hour on my system
 optimizer.fit(X_train, y_train)
 model = optimizer.best_estimator_
+params = optimizer.best_params_
 
 performance = evaluate_model(model, X_val, y_val, cat_names)
 
-save_model(model, 'model.pkl')
+save_model(model, params, 'model.pkl')
 
 
 
-# def evaluate_model(model, X_test, Y_test, category_names):
-#     pass
+def main():
+    if len(sys.argv) == 3:
+        db_path, model_path = sys.argv[1:]
+        # print('Loading data...\n    DATABASE: {}'.format(db_path))
+        X, y, cat_names = load_data(db_path)
+        X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2)
+
+        print('Building model...')
+        optimizer = build_model()
+
+        print('Training model...')
+        optimizer.fit(X_train, y_train)
+
+        model = optimizer.best_estimator_
+        params = optimizer.best_params_
+
+        print('Evaluating model...')
+        _ = evaluate_model(model, X_val, y_val, cat_names)
+
+        print('Saving model...\n    MODEL: {}'.format(model_path))
+        save_model(model, params, model_path)
+
+        print('Trained model saved!')
+
+    else:
+        print('Please provide the filepath of the disaster messages database '\
+              'as the first argument and the filepath of the pickle file to '\
+              'save the model to as the second argument. \n\nExample: python '\
+              'train_classifier.py ../data/DisasterResponse.db classifier.pkl')
 
 
-# def save_model(model, model_filepath):
-#     pass
-
-
-# def main():
-#     if len(sys.argv) == 3:
-#         db_path, model_filepath = sys.argv[1:]
-#         # print('Loading data...\n    DATABASE: {}'.format(db_path))
-#         X, Y, category_names = load_data(db_path)
-#         X_train, X_val, y_train, y_val = train_test_split(X, Y, test_size=0.2)
-
-#         print('Building model...')
-#         model = build_model()
-
-#         print('Training model...')
-#         model.fit(X_train, Y_train)
-
-#         print('Evaluating model...')
-#         evaluate_model(model, X_test, Y_test, category_names)
-
-#         print('Saving model...\n    MODEL: {}'.format(model_filepath))
-#         save_model(model, model_filepath)
-
-#         print('Trained model saved!')
-
-#     else:
-#         print('Please provide the filepath of the disaster messages database '\
-#               'as the first argument and the filepath of the pickle file to '\
-#               'save the model to as the second argument. \n\nExample: python '\
-#               'train_classifier.py ../data/DisasterResponse.db classifier.pkl')
-
-
-# if __name__ == '__main__':
-#     main()
+if __name__ == '__main__':
+    main()
