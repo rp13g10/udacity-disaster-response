@@ -175,7 +175,7 @@ def evaluate_model(model, X_val, y_val, cat_names):
         records.append(record)
 
     performance = pd.DataFrame.from_records(records)
-    performance.to_excel('model_performance.xlsx')
+    performance.to_excel('model_performance.xlsx', index=False)
 
     return performance
 
@@ -186,29 +186,14 @@ def save_model(model, params, model_path):
     with open(model_path, 'wb') as f:
         pickle.dump(model, f)
 
-    with open(f'{model_path}.params', 'w') as f:
-        json.dump(params, f)
-
-
-# Testing - function calls as in main()
-X, y, cat_names = load_data("../data/udacity.db")
-
-X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2)
-
-optimizer = build_model()
-
-# Takes ~1 hour on my system
-optimizer.fit(X_train, y_train)
-model = optimizer.best_estimator_
-params = optimizer.best_params_
-
-performance = evaluate_model(model, X_val, y_val, cat_names)
-
-save_model(model, params, 'model.pkl')
-
+    param_path = f"{model_path.split('.')[0]}_params.pkl"
+    with open(param_path, 'wb') as f:
+        pickle.dump(params, f)
 
 
 def main():
+    '''As defined by template'''
+
     if len(sys.argv) == 3:
         db_path, model_path = sys.argv[1:]
         # print('Loading data...\n    DATABASE: {}'.format(db_path))
