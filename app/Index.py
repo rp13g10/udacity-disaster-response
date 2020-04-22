@@ -5,8 +5,12 @@ import pickle
 
 import dash_core_components as dcc
 import dash_html_components as html
+import networkx as nx
+import pandas as pd
+import plotly.graph_objects as go
 from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
+from numpy import log
 
 from App import app
 from models.train_classifier import load_data, Tokenizer
@@ -17,6 +21,11 @@ with open('../models/model.pkl', 'rb') as f:
     classifier = pickle.load(f)
 
 X, y, cat_names = load_data('../data/udacity.db')
+
+cat_counts = {
+    cat: y[:,inx].sum()
+    for inx, cat in enumerate(cat_names)
+}
 
 # URL Bar ##########################################################################################
 
@@ -70,6 +79,7 @@ page_header = html.Nav(
 
 # Page Content #####################################################################################
 
+# Headline text ------------------------------------------------------------------------------------
 header_text = html.Div(
     [
         html.H1(
@@ -85,6 +95,7 @@ header_text = html.Div(
 )
 
 
+# User input ---------------------------------------------------------------------------------------
 msg_control = html.Div(
     [
         html.Div(
@@ -132,15 +143,8 @@ msg_input = html.Div(
     className='row mb-3'
 )
 
-cat_display = html.Div(
-    html.Div(
-        html.Div(),
-        id='jumbotron',
-        className='col-10 offset-1'
-    ),
-    className='row mb-3'
-)
 
+# Category display ---------------------------------------------------------------------------------
 
 def gen_cat_card(cat):
     cat = cat.replace('_', ' ')
@@ -185,16 +189,208 @@ def gen_jumbotron(msg_input):
     return jumbotron
 
 
+cat_display = html.Div(
+    html.Div(
+        html.Div(),
+        id='jumbotron',
+        className='col-10 offset-1'
+    ),
+    className='row mb-3'
+)
 
-# Temporary placeholder
+
+# Charts -------------------------------------------------------------------------------------------
+
+# Chart 1 - Wordcloud per topic
+
+# Chart 2 - Network graph showing co-occurrences
+def create_network():
+    cat_df = pd.DataFrame(y, columns=cat_names)
+
+    cat_df = cat_df.drop(columns=['child_alone'])
+    cat_names_copy = cat_names[:]
+    cat_names_copy.remove('child_alone')
+
+    # cat_df.loc[:, 'id'] = cat_df.index
+
+    # cat_df = cat_df.melt(
+    #     id_vars=['id'],
+    #     var_name='category',
+    #     value_name='is_matched'
+    # )
+
+    nodes_to_cats = {}
+    cats_to_nodes = {}
+    for inx, cat in enumerate(cat_names_copy):
+        nodes_to_cats[inx] = cat
+        cats_to_nodes[cat] = inx
+
+    node_list = nodes_to_cats.keys()
+    cat_list = [nodes_to_cats[x] for x in node_list]
+
+    edges = {}
+    for inx, row in cat_df.iterrows():
+        cats = row.loc[row==1]
+        cats = list(cats.keys())
+        if len(cats) >= 2:
+            for cat_from in cats:
+                cats_copy = cats[:]
+                cats_copy.remove(cat_from)
+
+                node_from = cats_to_nodes[cat_from]
+
+                for cat_to in cats_copy:
+                    node_to = cats_to_nodes[cat_to]
+                    connection = tuple(sorted([node_from, node_to]))
+
+                    if connection in edges:
+                        edges[connection]["Weight"] += 0.5
+                    else:
+                        edges[connection] = {"Weight": 0.5}
+
+    edges_to_add = [tuple(list(key) + [value['Weight']]) for key, value in edges.items()]
+
+    G = nx.Graph()
+
+    for node, cat in zip(node_list, cat_list):
+        G.add_node(node, code=cat, desc=cat)
+
+    G.add_weighted_edges_from(edges_to_add, weight='weight')
+
+    output = {
+        'graph': G,
+        'nodes': node_list,
+        'cats_to_nodes': cats_to_nodes,
+        'nodes_to_cats': nodes_to_cats
+    }
+
+    return output
+
+def plot_network(X_nodes, Y_nodes, Z_nodes,
+                 X_edges, Y_edges, Z_edges,
+                 L_nodes, C_nodes):
+
+    edge_trace = go.Scatter3d(
+        x=X_edges,
+        y=Y_edges,
+        z=Z_edges,
+        mode='lines',
+        line_width=1/log(len(X_nodes)),
+        line_color='rgb(150,150,150)',
+        hoverinfo='none'
+    )
+
+    marker = dict(
+        showscale=False,
+        symbol='circle',
+        colorscale='Viridis',
+        reversescale=False,
+        color=C_nodes,
+        size=6
+    )
+
+    node_trace = go.Scatter3d(
+        x=X_nodes,
+        y=Y_nodes,
+        z=Z_nodes,
+        text=L_nodes if L_nodes else None,
+        mode='markers',
+        hoverinfo='text',
+        hoverlabel=dict(
+            font=dict(
+                size=10
+            )
+        ),
+        marker=marker,
+    )
+
+    data = [edge_trace, node_trace]
+
+    axis = dict(
+        showbackground=False,
+        showline=False,
+        zeroline=False,
+        showgrid=False,
+        showticklabels=False,
+        showspikes=False,
+        title=dict(text='')
+    )
+
+    layout = go.Layout(
+        showlegend=False,
+        hovermode='closest',
+        margin=dict(b=0, l=0, r=0, t=0),
+        scene=dict(
+            xaxis=axis,
+            yaxis=axis,
+            zaxis=axis,
+        ),
+        autosize=True,
+        height=None,
+        width=None
+    )
+
+    figure = go.Figure(data, layout)
+
+    return figure
+
+def create_plot_network():
+
+    g_out = create_network()
+    G = g_out['graph']
+    node_list = g_out['nodes']
+    cats_to_nodes = g_out['cats_to_nodes']
+    nodes_to_cats = g_out['nodes_to_cats']
+
+    layout = nx.drawing.layout.spring_layout(G, weight='weight', dim=3)
+
+    X_nodes = [layout[k][0] for k in node_list]
+    Y_nodes = [layout[k][1] for k in node_list]
+    Z_nodes = [layout[k][2] for k in node_list]
+
+    L_nodes = [nodes_to_cats[k] for k in node_list]
+    C_nodes = [log(cat_counts[l]) for l in L_nodes]
+
+    X_edges, Y_edges, Z_edges, W_edges = [], [], [], []
+
+    for e in G.edges(data=True):
+        X_edges += [layout[e[0]][0], layout[e[1]][0], None]
+        Y_edges += [layout[e[0]][1], layout[e[1]][1], None]
+        Z_edges += [layout[e[0]][2], layout[e[1]][2], None]
+
+        W_edges += [e[2]['weight'], e[2]['weight'], None] # weight of connection
+
+    figure = plot_network(X_nodes, Y_nodes, Z_nodes,
+                          X_edges, Y_edges, Z_edges,
+                          L_nodes, C_nodes)
+
+    return figure
+
+
+network_graph = html.Div(
+    html.Div(
+        dcc.Graph(
+            figure=create_plot_network(),
+            id='network-graph'
+        ),
+        className='col-10 offset-1'
+    ),
+    className='row mb-3'
+)
+
+# Content Layout -----------------------------------------------------------------------------------
 page_content = html.Div(
     [
         header_text,
         msg_input,
-        cat_display
+        cat_display,
+        network_graph
     ],
     id='page-content'
 )
+
+
+# Page Initialization ##############################################################################
 
 def serve_layout():
     '''Defines the macro-level page layout (nav bar, page content, etc)'''
@@ -215,6 +411,9 @@ def serve_layout():
 
 app.layout = serve_layout
 
+
+# Callbacks ########################################################################################
+
 # pylint: disable=no-member
 @app.callback(
     [Output('msg-input', 'value'), Output('jumbotron', 'children')],
@@ -229,6 +428,7 @@ def display_input(btn_clicks, msg_input):
         return "", jumbotron
 
 
+# Run Server #######################################################################################
 if __name__ == '__main__':
     app.run_server(
         debug=True,
