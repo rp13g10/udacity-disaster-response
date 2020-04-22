@@ -1,16 +1,21 @@
 '''This module defines the overall page layout, and the content of static page elements
 such as the nav bar.'''
 
+import base64
 import pickle
+from io import BytesIO
 
 import dash_core_components as dcc
 import dash_html_components as html
+import matplotlib.pyplot as plt
 import networkx as nx
 import pandas as pd
 import plotly.graph_objects as go
 from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
 from numpy import log
+from numpy.random import random
+from wordcloud import WordCloud, STOPWORDS
 
 from App import app
 from models.train_classifier import load_data, Tokenizer
@@ -23,7 +28,7 @@ with open('../models/model.pkl', 'rb') as f:
 X, y, cat_names = load_data('../data/udacity.db')
 
 cat_counts = {
-    cat: y[:,inx].sum()
+    cat: y[:, inx].sum()
     for inx, cat in enumerate(cat_names)
 }
 
@@ -80,7 +85,7 @@ page_header = html.Nav(
 # Page Content #####################################################################################
 
 # Headline text ------------------------------------------------------------------------------------
-header_text = html.Div(
+page_title = html.Div(
     [
         html.H1(
             "Disaster Response Project",
@@ -201,7 +206,131 @@ cat_display = html.Div(
 
 # Charts -------------------------------------------------------------------------------------------
 
+chart_header = html.Div(
+    [
+        html.H1(
+            "Training Data Summary",
+            className="display-4 text-center w-100"
+        )
+    ],
+    className='row pb-4'
+)
+
+blank_figure = go.Figure(
+    layout=go.Layout(
+        showlegend=False,
+        margin=dict(b=0,l=0,r=0,t=0),
+        xaxis=dict(
+            showgrid=False,
+            zeroline=False,
+            showticklabels=False
+        ),
+        yaxis=dict(
+            showgrid=False,
+            zeroline=False,
+            showticklabels=False,
+            scaleanchor="x"
+        ),
+        autosize=True,
+        height=None,
+        width=None,
+        plot_bgcolor='#f7f7f7'
+    )
+)
+
 # Chart 1 - Wordcloud per topic
+
+cloud_controls = html.Div(
+    [
+        html.Div(
+            "Word Cloud",
+            className='card-header'
+        ),
+        html.Div(
+            [
+                html.P(
+                    "This is a word cloud! Description coming soon!",
+                    className='card-text'),
+            ],
+            className='card-body'
+        ),
+        html.Div(
+            dcc.Dropdown(
+                id='cloud-category',
+                options=[
+                    {'label': x, 'value': x}
+                    for x in cat_names
+                    if cat_counts[x] > 1
+                ],
+                value=cat_names[0]
+            ),
+            className='card-footer text-center'
+        )
+    ],
+    className='card'
+)
+
+def fig_to_uri(in_fig, close_all=True, **save_args):
+    # type: (plt.Figure) -> str
+    """
+    Save a figure as a URI
+    :param in_fig:
+    :return:
+    """
+    out_img = BytesIO()
+    in_fig.savefig(out_img, format='png', **save_args)
+    if close_all:
+        in_fig.clf()
+        plt.close('all')
+    out_img.seek(0)  # rewind file
+    encoded = base64.b64encode(out_img.read()).decode("ascii").replace("\n", "")
+    return "data:image/png;base64,{}".format(encoded)
+
+
+def generate_word_cloud(category):
+    cat_selector = cat_names.index(category)
+    cat_mask = pd.Series(y[:,cat_selector]).astype(bool)
+    cat_text = pd.Series(X).loc[cat_mask]
+
+    cat_text = " ".join(cat_text.dropna()).lower()
+
+    cloud = WordCloud(
+        background_color='#f7f7f7',
+        mode='RGBA',
+        stopwords=STOPWORDS,
+        normalize_plurals=True,
+        collocations=True,
+        width=1240,
+        height=720
+    ).generate(cat_text)
+
+    fig = plt.figure(1, figsize=(12.4, 7.2), dpi=100)
+
+    plt.axes([0, 0, 1, 1,], label=str(random()))
+
+    plt.imshow(cloud, interpolation='bilinear', aspect='equal')
+    plt.axis('off')
+    imstr = fig_to_uri(fig, bbox_inches=0,  dpi=100, figsize=(12.4, 7.2), transparent=True)
+
+    return imstr
+
+word_cloud = html.Div(
+    [
+        html.Div(
+            html.Img(
+                style={'align-self': 'center'},
+                className='img-fluid mx-auto rounded border border-light',
+                id='word-cloud'
+            ),
+            className='col-7 offset-1'
+        ),
+        html.Div(
+            cloud_controls,
+            className='col-3'
+        )
+    ],
+    className='row mb-3'
+)
 
 # Chart 2 - Network graph showing co-occurrences
 def create_network():
@@ -210,14 +339,6 @@ def create_network():
     cat_df = cat_df.drop(columns=['child_alone'])
     cat_names_copy = cat_names[:]
     cat_names_copy.remove('child_alone')
-
-    # cat_df.loc[:, 'id'] = cat_df.index
-
-    # cat_df = cat_df.melt(
-    #     id_vars=['id'],
-    #     var_name='category',
-    #     value_name='is_matched'
-    # )
 
     nodes_to_cats = {}
     cats_to_nodes = {}
@@ -266,9 +387,71 @@ def create_network():
 
     return output
 
-def plot_network(X_nodes, Y_nodes, Z_nodes,
-                 X_edges, Y_edges, Z_edges,
-                 L_nodes, C_nodes):
+def plot_network_2d(X_nodes, Y_nodes,
+                    X_edges, Y_edges,
+                    L_nodes, C_nodes):
+
+    edge_trace = go.Scatter(
+        x=X_edges,
+        y=Y_edges,
+        line=dict(
+            width=1/log(len(X_nodes)),
+            color='rgb(150,150,150)'
+        )
+    )
+
+    marker = dict(
+        showscale=False,
+        colorscale='Viridis',
+        reversescale=False,
+        color=C_nodes,
+        size=10,
+    )
+
+    node_trace = go.Scatter(
+        x=X_nodes,
+        y=Y_nodes,
+        text=L_nodes,
+        mode='markers',
+        hoverinfo='text',
+        hoverlabel=dict(
+            font=dict(
+                size=10
+            )
+        ),
+        marker=marker
+    )
+
+    data = [edge_trace, node_trace]
+
+    layout = go.Layout(
+        showlegend=False,
+        hovermode='closest',
+        margin=dict(b=0,l=0,r=0,t=0),
+        xaxis=dict(
+            showgrid=False,
+            zeroline=False,
+            showticklabels=False
+        ),
+        yaxis=dict(
+            showgrid=False,
+            zeroline=False,
+            showticklabels=False,
+            scaleanchor="x"
+        ),
+        autosize=True,
+        height=None,
+        width=None,
+        plot_bgcolor='#f7f7f7'
+    )
+
+    figure = go.Figure(data, layout)
+
+    return figure
+
+def plot_network_3d(X_nodes, Y_nodes, Z_nodes,
+                    X_edges, Y_edges, Z_edges,
+                    L_nodes, C_nodes):
 
     edge_trace = go.Scatter3d(
         x=X_edges,
@@ -293,7 +476,7 @@ def plot_network(X_nodes, Y_nodes, Z_nodes,
         x=X_nodes,
         y=Y_nodes,
         z=Z_nodes,
-        text=L_nodes if L_nodes else None,
+        text=L_nodes,
         mode='markers',
         hoverinfo='text',
         hoverlabel=dict(
@@ -327,14 +510,18 @@ def plot_network(X_nodes, Y_nodes, Z_nodes,
         ),
         autosize=True,
         height=None,
-        width=None
+        width=None,
+        plot_bgcolor='#f7f7f7'
     )
 
     figure = go.Figure(data, layout)
 
     return figure
 
-def create_plot_network():
+
+def create_plot_network(n_dims):
+
+    n_dims = int(n_dims)
 
     g_out = create_network()
     G = g_out['graph']
@@ -342,11 +529,12 @@ def create_plot_network():
     cats_to_nodes = g_out['cats_to_nodes']
     nodes_to_cats = g_out['nodes_to_cats']
 
-    layout = nx.drawing.layout.spring_layout(G, weight='weight', dim=3)
+    layout = nx.drawing.layout.spring_layout(G, weight='weight', dim=n_dims)
 
     X_nodes = [layout[k][0] for k in node_list]
     Y_nodes = [layout[k][1] for k in node_list]
-    Z_nodes = [layout[k][2] for k in node_list]
+    if n_dims == 3:
+        Z_nodes = [layout[k][2] for k in node_list]
 
     L_nodes = [nodes_to_cats[k] for k in node_list]
     C_nodes = [log(cat_counts[l]) for l in L_nodes]
@@ -356,35 +544,84 @@ def create_plot_network():
     for e in G.edges(data=True):
         X_edges += [layout[e[0]][0], layout[e[1]][0], None]
         Y_edges += [layout[e[0]][1], layout[e[1]][1], None]
-        Z_edges += [layout[e[0]][2], layout[e[1]][2], None]
+        if n_dims == 3:
+            Z_edges += [layout[e[0]][2], layout[e[1]][2], None]
 
         W_edges += [e[2]['weight'], e[2]['weight'], None] # weight of connection
 
-    figure = plot_network(X_nodes, Y_nodes, Z_nodes,
-                          X_edges, Y_edges, Z_edges,
-                          L_nodes, C_nodes)
+    if n_dims == 2:
+        figure = plot_network_2d(X_nodes, Y_nodes,
+                                 X_edges, Y_edges,
+                                 L_nodes, C_nodes)
+    elif n_dims == 3:
+        figure = plot_network_3d(X_nodes, Y_nodes, Z_nodes,
+                                 X_edges, Y_edges, Z_edges,
+                                 L_nodes, C_nodes)
 
     return figure
 
 
-network_graph = html.Div(
-    html.Div(
-        dcc.Graph(
-            figure=create_plot_network(),
-            id='network-graph'
+network_controls = html.Div(
+    [
+        html.Div(
+            "Network Graph",
+            className='card-header'
         ),
-        className='col-10 offset-1'
-    ),
+        html.Div(
+            [
+                html.P(
+                    "This is a network graph! Description coming soon!",
+                    className='card-text')
+            ],
+            className='card-body'
+        ),
+        html.Div(
+            [
+                dcc.RadioItems(
+                    id='network-dims',
+                    options=[
+                        {'label': '2D ', 'value': '2'},
+                        {'label': '3D ', 'value': '3'}
+                    ],
+                    value='2',
+                    className='d-inline'
+                ),
+                html.Button(
+                    'Draw',
+                    id='network-update',
+                    className='btn btn-primary h-100 px-3 mx-1 d-inline',
+                    n_clicks=0
+                ),
+            ],
+            className='card-footer text-center'
+        )
+    ],
+    className='card'
+)
+
+network_graph = html.Div(
+    [
+        html.Div(
+            dcc.Graph(figure=blank_figure, id='network-graph'),
+            className='col-7 offset-1'
+        ),
+        html.Div(
+            network_controls,
+            className='col-3'
+        )
+    ],
     className='row mb-3'
 )
 
 # Content Layout -----------------------------------------------------------------------------------
 page_content = html.Div(
     [
-        header_text,
+        page_title,
         msg_input,
         cat_display,
-        network_graph
+        chart_header,
+        network_graph,
+        word_cloud
     ],
     id='page-content'
 )
@@ -426,6 +663,22 @@ def display_input(btn_clicks, msg_input):
     else:
         jumbotron = gen_jumbotron(msg_input)
         return "", jumbotron
+
+@app.callback(
+    Output('network-graph', 'figure'),
+    [Input('network-update', 'n_clicks')],
+    [State('network-dims', 'value')])
+def update_network_graph(btn_clicks, n_dims):
+    if not btn_clicks:
+        raise PreventUpdate
+    figure = create_plot_network(n_dims)
+    return figure
+
+@app.callback(
+    Output('word-cloud', 'src'),
+    [Input('cloud-category', 'value')])
+def update_word_cloud(category):
+    return generate_word_cloud(category)
 
 
 # Run Server #######################################################################################
