@@ -132,35 +132,65 @@ msg_input = html.Div(
     className='row mb-3'
 )
 
-msg_display = html.Div(
+cat_display = html.Div(
     html.Div(
-        html.Blockquote(
-            html.P(id='msg-display'),
-            className='blockquote'
-        ),
+        html.Div(),
+        id='jumbotron',
         className='col-10 offset-1'
     ),
     className='row mb-3'
 )
 
-cat_display = html.Div(
-    html.Div(
-        html.Div(
-            [],
-            id='cat-display',
-            className='d-flex flex-row justify-content-center'
+
+def gen_cat_card(cat):
+    cat = cat.replace('_', ' ')
+    cat = cat.title()
+    card = html.Div(
+        html.P(
+            cat,
+            className='text-center m-0'
         ),
-        className='col-10 offset-1'
-    ),
-    className='container-fluid mb-3'
-)
+        className='alert alert-primary align-middle py-1 px-2 mr-2',
+        role='alert'
+    )
+    return card
+
+
+def gen_jumbotron(msg_input):
+    X = [msg_input]
+    y = classifier.predict(X)
+    y = y[0]
+
+    cats = [
+        name
+        for cat, name in zip(y, cat_names)
+        if cat
+    ]
+
+    cats = [gen_cat_card(cat) for cat in cats]
+
+    jumbotron = html.Div(
+        [
+            html.H1("Message Categories"),
+            html.P(msg_input, id='msg-display', className='lead'),
+            html.Hr(className='my-4'),
+            html.Div(
+                cats,
+                id='cat-display',
+                className='d-flex flex-row flex-wrap'),
+        ],
+        className='jumbotron'
+    )
+
+    return jumbotron
+
+
 
 # Temporary placeholder
 page_content = html.Div(
     [
         header_text,
         msg_input,
-        msg_display,
         cat_display
     ],
     id='page-content'
@@ -187,52 +217,17 @@ app.layout = serve_layout
 
 # pylint: disable=no-member
 @app.callback(
-    Output('msg-display', 'children'),
+    [Output('msg-input', 'value'), Output('jumbotron', 'children')],
     [Input('go-button', 'n_clicks')],
     [State('msg-input', 'value')])
 def display_input(btn_clicks, msg_input):
     '''Displays the input text, tagged with named entities and sentiment'''
     if not msg_input:
-        return ""
+        return "", html.Div()
     else:
-        return msg_input
+        jumbotron = gen_jumbotron(msg_input)
+        return "", jumbotron
 
-def gen_cat_card(cat):
-    cat = cat.replace('_', ' ')
-    cat = cat.title()
-    card = html.Div(
-        html.Div(
-            html.P(
-                cat,
-                className='text-center m-0'
-            ),
-            className='alert alert-primary align-middle py-1',
-            role='alert'
-        ),
-        # className='col-12 col-md-6 col-lg-4 col-xl-3 pb-1'
-        className='d-inline p-1'
-    )
-    return card
-
-@app.callback(
-    Output('cat-display', 'children'),
-    [Input('go-button', 'n_clicks')],
-    [State('msg-input', 'value')])
-def classify_input(btn_clicks, msg_input):
-    if not msg_input:
-        raise PreventUpdate
-    X = [msg_input]
-    y = classifier.predict(X)
-    y = y[0]
-
-    cats = [
-        name
-        for cat, name in zip(y, cat_names)
-        if cat
-    ]
-
-    cats = [gen_cat_card(cat) for cat in cats]
-    return cats
 
 if __name__ == '__main__':
     app.run_server(
