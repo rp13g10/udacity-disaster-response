@@ -2,7 +2,6 @@
 classifier object. Saves the object and generated metrics to disk.
 '''
 
-import json
 import os
 import pickle
 import string
