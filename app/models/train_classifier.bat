@@ -1,1 +1,0 @@
-python train_classifier.py ../data/udacity.db model.pkl

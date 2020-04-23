@@ -23,9 +23,9 @@ from sklearn.pipeline import Pipeline
 from xgboost import XGBClassifier
 
 # pylint: disable=redefined-outer-name
-
-file_dir = os.path.dirname(os.path.realpath(__file__))
-os.chdir(file_dir)
+if __name__ == '__main__':
+    file_dir = os.path.dirname(os.path.realpath(__file__))
+    os.chdir(file_dir)
 
 def load_data(db_path):
     '''Load processed data from the specified SQLite database, return
@@ -89,12 +89,16 @@ class Tokenizer(BaseEstimator, TransformerMixin):
 
     @lru_cache(maxsize=16192)
     def _tokenize(self, comment):
+        '''Perform tokenization & lemmatization on the provided comment'''
+
+        # Standardize case, word tokenize
         comment = comment.lower()
         tokens = nltk.word_tokenize(comment)
         tokens = [x for x in tokens
                   if x
                   and x not in string.punctuation]
 
+        # Perform POS tagging to aid lemmatization
         try:
             pos_tags = nltk.pos_tag(tokens)
         except LookupError:
@@ -106,13 +110,13 @@ class Tokenizer(BaseEstimator, TransformerMixin):
         # Remove stopwords after POS tagging to avoid changing meaning
         tokens = [self.wnl.lemmatize(token,
                                      pos=self._get_wordnet_pos(pos_tag))
-                  for token, pos_tag
-                  in pos_tags
+                  for token, pos_tag in pos_tags
                   if token not in self.stop]
 
         return tokens
 
     def __call__(self, comment):
+        '''Perform tokenization if class instance is called as a function'''
         return self._tokenize(comment)
 
 
@@ -143,6 +147,7 @@ def build_model():
          'clf__estimator__num_parallel_tree': [1, 4, 16]}
     ]
 
+    # Slightly more performant than GridSearchCV with similar results
     optimizer = RandomizedSearchCV(
         pipe,
         param_grids,
@@ -159,10 +164,12 @@ def evaluate_model(model, X_val, y_val, cat_names):
     predicted category
     '''
 
+    # Make predictions using the trained model
     y_pred = model.predict(X_val)
 
     records = []
     for inx, label in enumerate(cat_names):
+        # For each category, generate f1, precision & recall scores
         true = y_val[:, inx]
         pred = y_pred[:, inx]
         record = dict(
@@ -173,6 +180,7 @@ def evaluate_model(model, X_val, y_val, cat_names):
         )
         records.append(record)
 
+    # Create dataframe of results, write to disk
     performance = pd.DataFrame.from_records(records)
     performance.to_excel('model_performance.xlsx', index=False)
 
@@ -191,11 +199,13 @@ def save_model(model, params, model_path):
 
 
 def main():
-    '''As defined by template'''
+    '''As defined by template, executes the functions defined above'''
+    # pylint: disable=unbalanced-tuple-unpacking
 
     if len(sys.argv) == 3:
         db_path, model_path = sys.argv[1:]
-        # print('Loading data...\n    DATABASE: {}'.format(db_path))
+
+        print('Loading data...\n    DATABASE: {}'.format(db_path))
         X, y, cat_names = load_data(db_path)
         X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2)
 
@@ -220,7 +230,7 @@ def main():
         print('Please provide the filepath of the disaster messages database '\
               'as the first argument and the filepath of the pickle file to '\
               'save the model to as the second argument. \n\nExample: python '\
-              'train_classifier.py ../data/DisasterResponse.db classifier.pkl')
+              'train_classifier.py ../data/udacity.db model.pkl')
 
 
 if __name__ == '__main__':

@@ -8,16 +8,21 @@ import pandas as pd
 import sqlalchemy as sql
 
 # File imports
-file_dir = os.path.dirname(os.path.realpath(__file__))
-os.chdir(file_dir)
+if __name__ == '__main__':
+    file_dir = os.path.dirname(os.path.realpath(__file__))
+    os.chdir(file_dir)
 
 def load_data(msg_path, cat_path):
+    '''Load data from the specified file paths'''
+
     messages = pd.read_csv(msg_path)
     categories = pd.read_csv(cat_path)
     return messages, categories
 
 
 def clean_data(messages, categories):
+    '''Parse provided datasets into a suitable format for use by scikit-learn'''
+
     # Drop duplicates (68 duplicate IDs removed)
     categories = categories.drop_duplicates(subset=['id'])
     messages = messages.drop_duplicates(subset=['id'])
@@ -28,7 +33,7 @@ def clean_data(messages, categories):
     categories.loc[:, 'value'] = categories['category'].str.slice(-1).astype(int)
     categories.loc[:, 'category'] = categories['category'].str.slice(0, -2)
 
-    # Remove any duplicate categories, keeps 1s before 0s
+    # Remove any duplicate categories, keeping 1s before 0s
     categories.loc[:, 'value'] = categories['value'].map(lambda x: int(x >= 1))
     categories = categories.sort_values(by=['id', 'category', 'value'])
     categories = categories.drop_duplicates(subset=['id', 'category'], keep='last')
@@ -47,6 +52,7 @@ def clean_data(messages, categories):
 
 
 def save_data(messages, categories, db_path):
+    '''Save the processed datasets down to the provided database file'''
 
     # Set up dtype mappings
     msg_dtypes = {
@@ -85,6 +91,9 @@ def save_data(messages, categories, db_path):
 
 
 def main():
+    '''As defined by template, executes the functions defined above'''
+
+    # pylint: disable=unbalanced-tuple-unpacking
     if len(sys.argv) == 4:
 
         msg_path, cat_path, db_path = sys.argv[1:]
@@ -106,8 +115,7 @@ def main():
               'datasets as the first and second argument respectively, as '\
               'well as the filepath of the database to save the cleaned data '\
               'to as the third argument. \n\nExample: python process_data.py '\
-              'disaster_messages.csv disaster_categories.csv '\
-              'DisasterResponse.db')
+              'messages.csv categories.csv udacity.db')
 
 
 if __name__ == '__main__':
