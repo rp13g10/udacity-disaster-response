@@ -1,5 +1,5 @@
 '''This module defines the overall page layout, and the content of static page elements
-such as the nav bar.'''
+such as the nav bar. When called, it will serve the dashboard on port 8080'''
 
 import dash_core_components as dcc
 import dash_daq as daq
