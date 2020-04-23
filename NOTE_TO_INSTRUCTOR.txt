@@ -1,0 +1,4 @@
+This project is available on the following github repo:
+https://github.com/rp13g10/udacity-disaster-response
+
+Github seems to have gone offline so I am unable to push the final commits at present. This archive shows the most up to date code at the time of submission.

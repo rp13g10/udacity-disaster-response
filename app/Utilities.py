@@ -24,10 +24,10 @@ from models.train_classifier import load_data
 
 # Load External Dependencies #######################################################################
 
-with open('../models/model.pkl', 'rb') as f:
+with open('models/model.pkl', 'rb') as f:
     classifier = pickle.load(f)
 
-X, y, cat_names = load_data('../data/udacity.db')
+X, y, cat_names = load_data('data/udacity.db')
 
 cat_counts = {
     cat: y[:, inx].sum()
