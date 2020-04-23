@@ -142,8 +142,9 @@ msg_input = html.Div(
 
 cat_display = html.Div(
     html.Div(
-        html.Div(),
-        id='jumbotron',
+        dcc.Loading(
+            html.Div(id='jumbotron'),
+        ),
         className='col-10 offset-1'
     ),
     className='row mb-3'
