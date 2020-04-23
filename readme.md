@@ -5,6 +5,11 @@ This project aims to take free-text messages from social networks and identify t
 * A ML pipeline which trains a multi-output classifer which tags messages with categories
 * A dashboard which allows users to classify new messages and displays some visualizations of the data contained in the training dataset.
 
+Since model training took longer than expected, I didn't spend much time experimenting with this aspect of the project (instead opting to focus more on the dashboard). Future improvements which I might have implemented include:
+* Use bigrams instead of individual words, combined with PCA to keep the total number of features under control
+* Resample data to address the category imbalance (duplicate records from less common categories)
+* Switch to a neural network model. LSTM/GRU architectures are commonly used to interpret textual information, and being able to leverage the power of my GPU through CUDA would probably have significantly reduced training time.
+
 
 ## Requirements
 
