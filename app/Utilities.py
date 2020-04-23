@@ -14,9 +14,7 @@ from numpy import log
 from numpy.random import random
 from wordcloud import WordCloud, STOPWORDS
 
-# pylint: disable=unused-import
-# Tokenizer import needed to unpickle the classifier
-from models.train_classifier import load_data, Tokenizer
+from models.train_classifier import load_data
 
 
 
@@ -398,9 +396,6 @@ def plot_network_3d(X_nodes, Y_nodes, Z_nodes,
 def create_plot_network(n_dims):
     '''Create a n-dimensional plot which visualizes the connections between
     categories in the training dataset'''
-
-    # Dimension selector returns value as a string
-    n_dims = int(n_dims)
 
     # Generate the network graph, unpack output variables
     g_out = create_network()

@@ -2,15 +2,24 @@
 such as the nav bar.'''
 
 import dash_core_components as dcc
+import dash_daq as daq
 import dash_html_components as html
 import plotly.graph_objects as go
+import waitress
 from dash.dependencies import Input, Output, State
 from dash.exceptions import PreventUpdate
 
+# pylint: disable=unused-import
+# Tokenizer import needed to unpickle the classifier (needs to be in __main__)
 from App import app
+from models.train_classifier import Tokenizer
 from Utilities import cat_names, cat_counts
 from Utilities import gen_jumbotron, create_plot_network, generate_word_cloud
 
+
+####################################################################################################
+# Page Header                                                                                      #
+####################################################################################################
 
 # URL Bar ##########################################################################################
 
@@ -26,13 +35,8 @@ url_bar_content = html.Div(
 
 # Page Header ######################################################################################
 
-# Udacity logo
-# "Disaster Response Project"
-# GitHub repo link
-
 page_header = html.Nav(
     [
-        # Left hand side - Logo & page title
         html.A(
             [
                 html.Img(
@@ -62,9 +66,13 @@ page_header = html.Nav(
 )
 
 
-# Page Content #####################################################################################
 
-# Headline text ------------------------------------------------------------------------------------
+####################################################################################################
+# Page Content                                                                                     #
+####################################################################################################
+
+# Headline text ####################################################################################
+
 page_title = html.Div(
     [
         html.H1(
@@ -80,7 +88,8 @@ page_title = html.Div(
 )
 
 
-# User input ---------------------------------------------------------------------------------------
+# User input #######################################################################################
+
 msg_control = html.Div(
     [
         html.Div(
@@ -129,7 +138,7 @@ msg_input = html.Div(
 )
 
 
-# Category display ---------------------------------------------------------------------------------
+# Category display #################################################################################
 
 cat_display = html.Div(
     html.Div(
@@ -141,7 +150,7 @@ cat_display = html.Div(
 )
 
 
-# Charts -------------------------------------------------------------------------------------------
+# Charts ###########################################################################################
 
 chart_header = html.Div(
     [
@@ -175,7 +184,11 @@ blank_figure = go.Figure(
     )
 )
 
-# Chart 1 - Wordcloud per topic
+
+# Word Cloud ---------------------------------------------------------------------------------------
+
+cloud_desc = "Select a category to view the words which most commonly appeared \
+within it. The larger the word, the more common it was in the training dataset."
 
 cloud_controls = html.Div(
     [
@@ -186,7 +199,7 @@ cloud_controls = html.Div(
         html.Div(
             [
                 html.P(
-                    "This is a word cloud! Description coming soon!",
+                    cloud_desc,
                     className='card-text'),
             ],
             className='card-body'
@@ -211,12 +224,14 @@ cloud_controls = html.Div(
 word_cloud = html.Div(
     [
         html.Div(
-            html.Img(
-                style={'align-self': 'center'},
-                className='img-fluid mx-auto rounded border border-light',
-                id='word-cloud'
+            dcc.Loading(
+                html.Img(
+                    style={'align-self': 'center'},
+                    className='img-fluid mx-auto rounded border border-light',
+                    id='word-cloud'
+                )
             ),
-            className='col-7 offset-1'
+            className='col-7 offset-1 text-center'
         ),
         html.Div(
             cloud_controls,
@@ -226,7 +241,14 @@ word_cloud = html.Div(
     className='row mb-3'
 )
 
-# Chart 2 - Network graph showing co-occurrences
+
+# Network Graph ------------------------------------------------------------------------------------
+
+network_desc = "This network graph shows how frequently different categories appeared \
+together in the same message. The closer together two categories are, the more frequently \
+they appeared together. For example, 'buildings' and 'earthquake' are commonly reported \
+together."
+
 
 network_controls = html.Div(
     [
@@ -237,28 +259,41 @@ network_controls = html.Div(
         html.Div(
             [
                 html.P(
-                    "This is a network graph! Description coming soon!",
-                    className='card-text')
+                    network_desc,
+                    className='card-text'),
+                html.P(
+                    "Activate the toggle below to enable an exciting 3D plot!",
+                    className='card-text'
+                )
             ],
             className='card-body'
         ),
         html.Div(
             [
-                dcc.RadioItems(
-                    id='network-dims',
-                    options=[
-                        {'label': '2D ', 'value': '2'},
-                        {'label': '3D ', 'value': '3'}
+                html.Div(
+                    [
+                        html.Div(
+                            # pylint: disable=not-callable
+                            # False positive error raised on BooleanSwitch
+                            daq.BooleanSwitch(
+                                id='network-dims',
+                                on=False,
+                                className='d-inline'
+                            ),
+                            className='col-6'
+                        ),
+                        html.Div(
+                            html.Button(
+                                'Draw',
+                                id='network-update',
+                                className='btn btn-primary h-100 px-3 mx-1 d-inline',
+                                n_clicks=0
+                            ),
+                            className='col-6'
+                        )
                     ],
-                    value='2',
-                    className='d-inline'
-                ),
-                html.Button(
-                    'Draw',
-                    id='network-update',
-                    className='btn btn-primary h-100 px-3 mx-1 d-inline',
-                    n_clicks=0
-                ),
+                    className='row'
+                )
             ],
             className='card-footer text-center'
         )
@@ -269,7 +304,9 @@ network_controls = html.Div(
 network_graph = html.Div(
     [
         html.Div(
-            dcc.Graph(figure=blank_figure, id='network-graph'),
+            dcc.Loading(
+                dcc.Graph(figure=blank_figure, id='network-graph'),
+            ),
             className='col-7 offset-1'
         ),
         html.Div(
@@ -280,19 +317,27 @@ network_graph = html.Div(
     className='row mb-3'
 )
 
-# Content Layout -----------------------------------------------------------------------------------
+
+# Content Layout ###################################################################################
+
+# Set the order in which each element is displayed
 page_content = html.Div(
     [
         page_title,
         msg_input,
         cat_display,
         chart_header,
-        network_graph,
-        word_cloud
+        word_cloud,
+        network_graph
     ],
     id='page-content'
 )
 
+
+
+####################################################################################################
+# App Configuration                                                                                #
+####################################################################################################
 
 # Page Initialization ##############################################################################
 
@@ -334,13 +379,14 @@ def display_input(btn_clicks, usr_input):
 @app.callback(
     Output('network-graph', 'figure'),
     [Input('network-update', 'n_clicks')],
-    [State('network-dims', 'value')])
-def update_network_graph(btn_clicks, n_dims):
+    [State('network-dims', 'on')])
+def update_network_graph(btn_clicks, excitement_flag):
     '''Generates a network graph which helps to visualize the categories which
     most frequently appear together in the training dataset'''
 
     if not btn_clicks:
         raise PreventUpdate
+    n_dims = 3 if excitement_flag else 2
     figure = create_plot_network(n_dims)
     return figure
 
@@ -354,8 +400,7 @@ def update_word_cloud(category):
 
 
 # Run Server #######################################################################################
+
 if __name__ == '__main__':
-    app.run_server(
-        debug=True,
-        threaded=True
-    )
+    server = app.server
+    waitress.serve(server)
